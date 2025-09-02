@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 from dotenv import load_dotenv
 import os
 
@@ -11,7 +12,8 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.memory import ConversationBufferMemory
 
-app = Flask(__name__)  
+app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 load_dotenv()
 PINECONE_API_KEY = os.environ.get('PINECONE_API_KEY')
@@ -19,6 +21,7 @@ OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 os.environ["PINECONE_API_KEY"] = PINECONE_API_KEY
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 
+# Initialize embeddings and Pinecone vector store
 embeddings = download_embeddings()
 index_name = "medical-chatbot"
 
@@ -46,15 +49,18 @@ memory = ConversationBufferMemory(memory_key="chat_history", return_messages=Tru
 # Create retrieval-augmented generation chain
 rag_chain = create_retrieval_chain(retriever, question_answer_chain, memory=memory)
 
-@app.route("/")
-def index():
-    return render_template('chat.html')
+# Health check endpoint
+@app.route("/health", methods=["GET"])
+def health_check():
+    return jsonify({"status": "ok", "message": "API is running"}), 200
 
-@app.route("/get", methods=["GET", "POST"])
+# Chat endpoint
+@app.route("/chat", methods=["POST"])
 def chat():
-    msg = request.form["msg"]
+    data = request.json
+    msg = data.get("msg", "")
     response = rag_chain.invoke({"input": msg})
-    return str(response["answer"])
+    return jsonify({"answer": response["answer"]})
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8080, debug=True)
