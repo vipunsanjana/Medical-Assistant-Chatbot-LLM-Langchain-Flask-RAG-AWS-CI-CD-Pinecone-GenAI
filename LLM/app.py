@@ -10,7 +10,6 @@ from langchain_openai import ChatOpenAI
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
-from langchain.memory import ConversationBufferMemory
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -43,16 +42,13 @@ prompt = ChatPromptTemplate.from_messages(
 # Create document chain
 question_answer_chain = create_stuff_documents_chain(chat_model, prompt)
 
-# Add conversation memory
-memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-
 # Create retrieval-augmented generation chain
-rag_chain = create_retrieval_chain(retriever, question_answer_chain, memory=memory)
+rag_chain = create_retrieval_chain(retriever, question_answer_chain)
 
 # Health check endpoint
 @app.route("/health", methods=["GET"])
 def health_check():
-    return jsonify({"status": "ok", "message": "API is running"}), 200
+    return jsonify({"status": "healthy", "message": "healthy"}), 200
 
 # Chat endpoint
 @app.route("/chat", methods=["POST"])

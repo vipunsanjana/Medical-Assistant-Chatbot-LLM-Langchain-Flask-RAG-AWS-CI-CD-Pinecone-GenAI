@@ -1,0 +1,69 @@
+name: Deploy LLM + React to ECS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    env:
+      AWS_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      # -----------------------
+      # Build & Push LLM Backend
+      # -----------------------
+      - name: Build & Push LLM Backend Docker Image
+        run: |
+          echo "🚀 Building LLM backend Docker image..."
+          docker build -t ${{ secrets.ECR_LLM_REPO }}:latest ./llm
+          docker tag ${{ secrets.ECR_LLM_REPO }}:latest ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_LLM_REPO }}:latest
+          docker push ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_LLM_REPO }}:latest
+          echo "✅ LLM backend image pushed: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_LLM_REPO }}:latest"
+
+      # -----------------------
+      # Build & Push React Frontend
+      # -----------------------
+      - name: Build & Push React Frontend Docker Image
+        run: |
+          echo "🚀 Building React frontend Docker image..."
+          docker build \
+            --build-arg VITE_API_URL=${{ secrets.VITE_API_URL }} \
+            -t ${{ secrets.ECR_REACT_REPO }}:latest ./client
+          docker tag ${{ secrets.ECR_REACT_REPO }}:latest ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REACT_REPO }}:latest
+          docker push ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REACT_REPO }}:latest
+          echo "✅ React frontend image pushed: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REACT_REPO }}:latest"
+
+      # -----------------------
+      # Update ECS Services
+      # -----------------------
+      - name: Update ECS LLM Service
+        run: |
+          echo "🔄 Updating ECS LLM service..."
+          aws ecs update-service \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.ECS_LLM_SERVICE }} \
+            --force-new-deployment \
+            --region ${{ secrets.AWS_DEFAULT_REGION }}
+          echo "✅ ECS LLM service updated"
+
+      - name: Update ECS React Service
+        run: |
+          echo "🔄 Updating ECS React service..."
+          aws ecs update-service \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.ECS_REACT_SERVICE }} \
+            --force-new-deployment \
+            --region ${{ secrets.AWS_DEFAULT_REGION }}
+          echo "✅ ECS React service updated"
